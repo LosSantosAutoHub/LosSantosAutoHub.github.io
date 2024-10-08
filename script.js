@@ -30,9 +30,11 @@ function refreshData() {
     currentUser = JSON.parse(localStorage.getItem('currentUser'));
 }
 
+// Değişkenleri başlangıç değerleriyle tanımla
 let listings = [];
 let currentUser = null;
 let messages = {};
+
 
 function saveListings() {
     serverData.listings = listings;
