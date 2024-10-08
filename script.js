@@ -1,4 +1,5 @@
 // script.js
+
 const vehicles = {
     "Albany": ["Cavalcade", "Emperor", "Hermes"],
     "Annis": ["Elegy", "RE-7B", "Savestra"],
@@ -6,16 +7,41 @@ const vehicles = {
     // Diğer markalar ve modeller eklenecek
 };
 
-let listings = JSON.parse(localStorage.getItem('listings')) || [];
-let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
-let messages = JSON.parse(localStorage.getItem('messages')) || {};
+// Simüle edilmiş "sunucu" verisi
+let serverData = JSON.parse(localStorage.getItem('serverData')) || { listings: [], users: [], messages: {} };
+
+// Veriyi "sunucu"ya kaydetme fonksiyonu
+function saveToServer() {
+    localStorage.setItem('serverData', JSON.stringify(serverData));
+}
+
+// Veriyi "sunucu"dan alma fonksiyonu
+function getFromServer() {
+    serverData = JSON.parse(localStorage.getItem('serverData')) || { listings: [], users: [], messages: {} };
+    return serverData;
+}
+
+// Her sayfa yüklendiğinde ve önemli işlemlerden sonra veriyi güncelle
+function refreshData() {
+    const data = getFromServer();
+    listings = data.listings;
+    messages = data.messages;
+    // Mevcut kullanıcıyı koru
+    currentUser = JSON.parse(localStorage.getItem('currentUser'));
+}
+
+let listings = [];
+let currentUser = null;
+let messages = {};
 
 function saveListings() {
-    localStorage.setItem('listings', JSON.stringify(listings));
+    serverData.listings = listings;
+    saveToServer();
 }
 
 function saveMessages() {
-    localStorage.setItem('messages', JSON.stringify(messages));
+    serverData.messages = messages;
+    saveToServer();
 }
 
 function showHomePage() {
@@ -55,6 +81,7 @@ function deleteListing(index) {
         if (confirm('Bu ilanı silmek istediğinizden emin misiniz?')) {
             listings.splice(index, 1);
             saveListings();
+            refreshData();
             showHomePage();
         }
     } else {
@@ -78,13 +105,14 @@ function showLoginForm() {
         const email = document.getElementById('loginEmail').value;
         const password = document.getElementById('loginPassword').value;
 
-        const users = JSON.parse(localStorage.getItem('users')) || [];
+        const users = serverData.users;
         const user = users.find(u => u.email === email && u.password === password);
 
         if (user) {
             currentUser = user;
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
             alert('Giriş başarılı!');
+            refreshData();
             showHomePage();
         } else {
             alert('Geçersiz e-posta veya şifre!');
@@ -110,7 +138,7 @@ function showRegisterForm() {
         const email = document.getElementById('registerEmail').value;
         const password = document.getElementById('registerPassword').value;
 
-        const users = JSON.parse(localStorage.getItem('users')) || [];
+        const users = serverData.users;
         if (users.some(user => user.email === email)) {
             alert('Bu e-posta adresi zaten kullanılıyor!');
             return;
@@ -118,7 +146,8 @@ function showRegisterForm() {
 
         const newUser = { name, email, password };
         users.push(newUser);
-        localStorage.setItem('users', JSON.stringify(users));
+        serverData.users = users;
+        saveToServer();
 
         alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
         showLoginForm();
@@ -126,7 +155,6 @@ function showRegisterForm() {
 }
 
 function showNewListingForm() {
-    // ... (mevcut kod aynı kalabilir)
     let brandOptions = '<option value="">Marka Seçin</option>';
     for (let brand in vehicles) {
         brandOptions += `<option value="${brand}">${brand}</option>`;
@@ -198,6 +226,7 @@ function showNewListingForm() {
         };
         listings.push(newListing);
         saveListings();
+        refreshData();
         alert('İlan başarıyla eklendi!');
         showHomePage();
     });
@@ -238,6 +267,7 @@ function showMessageForm(listingIndex) {
         });
 
         saveMessages();
+        refreshData();
         alert('Mesaj gönderildi!');
         showHomePage();
     });
@@ -250,13 +280,15 @@ function showChatPage() {
     } else {
         for (const listingIndex in messages[currentUser.email]) {
             const listing = listings[listingIndex];
-            content += `
-                <div class="chat-preview">
-                    <h3>${listing.brand} ${listing.model}</h3>
-                    <p>Son mesaj: ${messages[currentUser.email][listingIndex][messages[currentUser.email][listingIndex].length - 1].content}</p>
-                    <button onclick="showChat(${listingIndex})">Sohbeti Görüntüle</button>
-                </div>
-            `;
+            if (listing) { // Eğer ilan hala mevcutsa
+                content += `
+                    <div class="chat-preview">
+                        <h3>${listing.brand} ${listing.model}</h3>
+                        <p>Son mesaj: ${messages[currentUser.email][listingIndex][messages[currentUser.email][listingIndex].length - 1].content}</p>
+                        <button onclick="showChat(${listingIndex})">Sohbeti Görüntüle</button>
+                    </div>
+                `;
+            }
         }
     }
     document.getElementById('mainContent').innerHTML = content;
@@ -300,6 +332,7 @@ function showChat(listingIndex) {
             timestamp: new Date().toISOString()
         });
         saveMessages();
+        refreshData();
         document.getElementById('chatMessageContent').value = '';
         updateChatMessages();
     });
@@ -308,11 +341,13 @@ function showChat(listingIndex) {
 function logout() {
     currentUser = null;
     localStorage.removeItem('currentUser');
+    refreshData();
     showHomePage();
 }
 
-// Sayfa yüklendiğinde ana sayfayı göster
+// Sayfa yüklendiğinde veriyi yenile ve ana sayfayı göster
 window.onload = function() {
+    refreshData();
     showHomePage();
     // Kullanıcı girişi yapılmışsa, çıkış butonu ekle
     if (currentUser) {
@@ -327,8 +362,11 @@ window.onload = function() {
     }
 };
 
-// Menü linklerine tıklandığında ilgili sayfaları göster
-document.getElementById('homeLink').addEventListener('click', showHomePage);
+// Menü linklerine tıklandığında ilgili sayfaları göster ve veriyi yenile
+document.getElementById('homeLink').addEventListener('click', function() {
+    refreshData();
+    showHomePage();
+});
 document.getElementById('loginLink').addEventListener('click', showLoginForm);
 document.getElementById('registerLink').addEventListener('click', showRegisterForm);
 document.getElementById('newListingLink').addEventListener('click', showNewListingForm);
