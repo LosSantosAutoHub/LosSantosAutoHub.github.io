@@ -36,6 +36,8 @@ function showHomePage() {
                         <div class="listing-buttons">
                             <button class="message-btn" onclick="showMessageForm(${index})">Mesaj At</button>
                             <button class="buy-btn">Satın Al</button>
+                            ${currentUser && currentUser.email === listing.userEmail ? 
+                                `<button class="delete-btn" onclick="deleteListing(${index})">İlanı Sil</button>` : ''}
                         </div>
                     </div>
                 </div>
@@ -46,6 +48,18 @@ function showHomePage() {
         content += '<button onclick="showChatPage()">Sohbetler</button>';
     }
     document.getElementById('mainContent').innerHTML = content;
+}
+
+function deleteListing(index) {
+    if (currentUser && currentUser.email === listings[index].userEmail) {
+        if (confirm('Bu ilanı silmek istediğinizden emin misiniz?')) {
+            listings.splice(index, 1);
+            saveListings();
+            showHomePage();
+        }
+    } else {
+        alert('Bu ilanı silme yetkiniz yok!');
+    }
 }
 
 function showLoginForm() {
@@ -113,6 +127,80 @@ function showRegisterForm() {
 
 function showNewListingForm() {
     // ... (mevcut kod aynı kalabilir)
+    let brandOptions = '<option value="">Marka Seçin</option>';
+    for (let brand in vehicles) {
+        brandOptions += `<option value="${brand}">${brand}</option>`;
+    }
+    brandOptions += '<option value="other">Diğer</option>';
+
+    const content = `
+        <h2>Yeni İlan Ver</h2>
+        <form id="newListingForm">
+            <select id="vehicleType" required>
+                <option value="">Araç Tipi Seçin</option>
+                <option value="car">Araba</option>
+                <option value="motorcycle">Motosiklet</option>
+                <option value="bicycle">Bisiklet</option>
+            </select>
+            <select id="brand" required>
+                ${brandOptions}
+            </select>
+            <select id="model" required>
+                <option value="">Önce Marka Seçin</option>
+            </select>
+            <input type="number" id="price" placeholder="Fiyat (GTA$)" required>
+            <select id="platform" required>
+                <option value="">Platform Seçin</option>
+                <option value="fivem">FiveM</option>
+                <option value="other">Diğer</option>
+            </select>
+            <input type="text" id="otherPlatform" placeholder="Diğer Platform" style="display:none;">
+            <textarea id="description" placeholder="Açıklama"></textarea>
+            <select id="accidentHistory" required>
+                <option value="">Kaza Kaydı</option>
+                <option value="no">Yok</option>
+                <option value="yes">Var</option>
+            </select>
+            <input type="file" id="images" accept="image/*" multiple required>
+            <button type="submit">İlan Ver</button>
+        </form>
+    `;
+    document.getElementById('mainContent').innerHTML = content;
+
+    document.getElementById('brand').addEventListener('change', function() {
+        const brand = this.value;
+        let modelOptions = '<option value="">Model Seçin</option>';
+        if (brand && brand !== 'other') {
+            for (let model of vehicles[brand]) {
+                modelOptions += `<option value="${model}">${model}</option>`;
+            }
+        }
+        document.getElementById('model').innerHTML = modelOptions;
+    });
+
+    document.getElementById('platform').addEventListener('change', function() {
+        const otherPlatform = document.getElementById('otherPlatform');
+        otherPlatform.style.display = this.value === 'other' ? 'block' : 'none';
+    });
+
+    document.getElementById('newListingForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const newListing = {
+            vehicleType: document.getElementById('vehicleType').value,
+            brand: document.getElementById('brand').value,
+            model: document.getElementById('model').value,
+            price: document.getElementById('price').value,
+            platform: document.getElementById('platform').value,
+            description: document.getElementById('description').value,
+            accidentHistory: document.getElementById('accidentHistory').value,
+            images: ['placeholder-image.jpg'], // Gerçek dosya yükleme işlemi burada yapılmalı
+            userEmail: currentUser.email
+        };
+        listings.push(newListing);
+        saveListings();
+        alert('İlan başarıyla eklendi!');
+        showHomePage();
+    });
 }
 
 function showMessageForm(listingIndex) {
