@@ -7,43 +7,74 @@ const vehicles = {
     // Diğer markalar ve modeller eklenecek
 };
 
-// Simüle edilmiş "sunucu" verisi
-let serverData = JSON.parse(localStorage.getItem('serverData')) || { listings: [], users: [], messages: {} };
+// IndexedDB için değişkenler ve fonksiyonlar
+let db;
+const dbName = "GtaMarketDB";
+const dbVersion = 1;
 
-// Veriyi "sunucu"ya kaydetme fonksiyonu
-function saveToServer() {
-    localStorage.setItem('serverData', JSON.stringify(serverData));
+const request = indexedDB.open(dbName, dbVersion);
+
+request.onerror = function(event) {
+    console.error("IndexedDB hatası:", event.target.error);
+};
+
+request.onsuccess = function(event) {
+    db = event.target.result;
+    console.log("IndexedDB başarıyla açıldı");
+    refreshData();
+};
+
+request.onupgradeneeded = function(event) {
+    db = event.target.result;
+    const objectStore = db.createObjectStore("listings", { keyPath: "id", autoIncrement: true });
+    const messagesStore = db.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
+};
+
+function saveToDatabase(storeName, data) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([storeName], "readwrite");
+        const objectStore = transaction.objectStore(storeName);
+        const request = objectStore.add(data);
+        
+        request.onerror = function(event) {
+            reject("Veri eklenirken hata oluştu");
+        };
+        
+        request.onsuccess = function(event) {
+            resolve(event.target.result);
+        };
+    });
 }
 
-// Veriyi "sunucu"dan alma fonksiyonu
-function getFromServer() {
-    serverData = JSON.parse(localStorage.getItem('serverData')) || { listings: [], users: [], messages: {} };
-    return serverData;
+function getFromDatabase(storeName) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([storeName]);
+        const objectStore = transaction.objectStore(storeName);
+        const request = objectStore.getAll();
+        
+        request.onerror = function(event) {
+            reject("Veriler alınırken hata oluştu");
+        };
+        
+        request.onsuccess = function(event) {
+            resolve(event.target.result);
+        };
+    });
 }
 
-// Her sayfa yüklendiğinde ve önemli işlemlerden sonra veriyi güncelle
-function refreshData() {
-    const data = getFromServer();
-    listings = data.listings;
-    messages = data.messages;
-    // Mevcut kullanıcıyı koru
-    currentUser = JSON.parse(localStorage.getItem('currentUser'));
-}
-
-// Değişkenleri başlangıç değerleriyle tanımla
 let listings = [];
 let currentUser = null;
 let messages = {};
 
-
-function saveListings() {
-    serverData.listings = listings;
-    saveToServer();
-}
-
-function saveMessages() {
-    serverData.messages = messages;
-    saveToServer();
+async function refreshData() {
+    try {
+        listings = await getFromDatabase("listings");
+        messages = await getFromDatabase("messages");
+        currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        showHomePage();
+    } catch (error) {
+        console.error("Veri yenileme hatası:", error);
+    }
 }
 
 function showHomePage() {
@@ -73,22 +104,9 @@ function showHomePage() {
         });
     }
     if (currentUser) {
-        content += '<button onclick="showChatPage()">Sohbetler</button>';
+        content += '<button onclick="showChatsPage()">Sohbetler</button>';
     }
     document.getElementById('mainContent').innerHTML = content;
-}
-
-function deleteListing(index) {
-    if (currentUser && currentUser.email === listings[index].userEmail) {
-        if (confirm('Bu ilanı silmek istediğinizden emin misiniz?')) {
-            listings.splice(index, 1);
-            saveListings();
-            refreshData();
-            showHomePage();
-        }
-    } else {
-        alert('Bu ilanı silme yetkiniz yok!');
-    }
 }
 
 function showLoginForm() {
@@ -107,18 +125,17 @@ function showLoginForm() {
         const email = document.getElementById('loginEmail').value;
         const password = document.getElementById('loginPassword').value;
 
-        const users = serverData.users;
-        const user = users.find(u => u.email === email && u.password === password);
-
-        if (user) {
-            currentUser = user;
-            localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            alert('Giriş başarılı!');
-            refreshData();
-            showHomePage();
-        } else {
-            alert('Geçersiz e-posta veya şifre!');
-        }
+        getFromDatabase("users").then(users => {
+            const user = users.find(u => u.email === email && u.password === password);
+            if (user) {
+                currentUser = user;
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                alert('Giriş başarılı!');
+                refreshData();
+            } else {
+                alert('Geçersiz e-posta veya şifre!');
+            }
+        });
     });
 }
 
@@ -140,19 +157,13 @@ function showRegisterForm() {
         const email = document.getElementById('registerEmail').value;
         const password = document.getElementById('registerPassword').value;
 
-        const users = serverData.users;
-        if (users.some(user => user.email === email)) {
-            alert('Bu e-posta adresi zaten kullanılıyor!');
-            return;
-        }
-
         const newUser = { name, email, password };
-        users.push(newUser);
-        serverData.users = users;
-        saveToServer();
-
-        alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
-        showLoginForm();
+        saveToDatabase("users", newUser).then(() => {
+            alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
+            showLoginForm();
+        }).catch(error => {
+            alert('Kayıt olurken bir hata oluştu: ' + error);
+        });
     });
 }
 
@@ -226,83 +237,44 @@ function showNewListingForm() {
             images: ['placeholder-image.jpg'], // Gerçek dosya yükleme işlemi burada yapılmalı
             userEmail: currentUser.email
         };
-        listings.push(newListing);
-        saveListings();
-        refreshData();
-        alert('İlan başarıyla eklendi!');
-        showHomePage();
-    });
-}
-
-function showMessageForm(listingIndex) {
-    if (!currentUser) {
-        alert('Mesaj göndermek için giriş yapmalısınız!');
-        return;
-    }
-
-    const listing = listings[listingIndex];
-    const content = `
-        <h2>Mesaj Gönder</h2>
-        <form id="messageForm">
-            <input type="hidden" id="listingIndex" value="${listingIndex}">
-            <textarea id="messageContent" placeholder="Mesajınızı yazın" required></textarea>
-            <button type="submit">Gönder</button>
-        </form>
-    `;
-    document.getElementById('mainContent').innerHTML = content;
-
-    document.getElementById('messageForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const listingIndex = document.getElementById('listingIndex').value;
-        const messageContent = document.getElementById('messageContent').value;
-
-        if (!messages[currentUser.email]) {
-            messages[currentUser.email] = {};
-        }
-        if (!messages[currentUser.email][listingIndex]) {
-            messages[currentUser.email][listingIndex] = [];
-        }
-        messages[currentUser.email][listingIndex].push({
-            sender: currentUser.email,
-            content: messageContent,
-            timestamp: new Date().toISOString()
+        saveToDatabase("listings", newListing).then(() => {
+            alert('İlan başarıyla eklendi!');
+            refreshData();
+        }).catch(error => {
+            alert('İlan eklenirken bir hata oluştu: ' + error);
         });
-
-        saveMessages();
-        refreshData();
-        alert('Mesaj gönderildi!');
-        showHomePage();
     });
 }
 
-function showChatPage() {
+function showChatsPage() {
     let content = '<h2>Sohbetler</h2>';
-    if (!messages[currentUser.email] || Object.keys(messages[currentUser.email]).length === 0) {
+    if (messages.length === 0) {
         content += '<p>Henüz hiç sohbetiniz yok.</p>';
     } else {
-        for (const listingIndex in messages[currentUser.email]) {
-            const listing = listings[listingIndex];
-            if (listing) { // Eğer ilan hala mevcutsa
-                content += `
-                    <div class="chat-preview">
-                        <h3>${listing.brand} ${listing.model}</h3>
-                        <p>Son mesaj: ${messages[currentUser.email][listingIndex][messages[currentUser.email][listingIndex].length - 1].content}</p>
-                        <button onclick="showChat(${listingIndex})">Sohbeti Görüntüle</button>
+        content += '<div class="chat-list">';
+        messages.forEach((chat, index) => {
+            content += `
+                <div class="chat-item" onclick="showChat(${index})">
+                    <img src="${chat.avatar || '/placeholder-avatar.jpg'}" alt="${chat.name}" class="chat-avatar">
+                    <div class="chat-info">
+                        <h3>${chat.name}</h3>
+                        <p>${chat.lastMessage}</p>
                     </div>
-                `;
-            }
-        }
+                </div>
+            `;
+        });
+        content += '</div>';
     }
     document.getElementById('mainContent').innerHTML = content;
 }
 
-function showChat(listingIndex) {
-    const listing = listings[listingIndex];
-    let content = `<h2>${listing.brand} ${listing.model} İçin Sohbet</h2>`;
+function showChat(index) {
+    const chat = messages[index];
+    let content = `<h2>${chat.name} ile Sohbet</h2>`;
     content += '<div id="chatMessages"></div>';
     content += `
         <form id="chatForm">
-            <input type="hidden" id="chatListingIndex" value="${listingIndex}">
+            <input type="hidden" id="chatIndex" value="${index}">
             <textarea id="chatMessageContent" placeholder="Mesajınızı yazın" required></textarea>
             <button type="submit">Gönder</button>
         </form>
@@ -312,7 +284,7 @@ function showChat(listingIndex) {
     function updateChatMessages() {
         const chatMessages = document.getElementById('chatMessages');
         chatMessages.innerHTML = '';
-        for (const message of messages[currentUser.email][listingIndex]) {
+        for (const message of chat.messages) {
             chatMessages.innerHTML += `
                 <div class="message ${message.sender === currentUser.email ? 'sent' : 'received'}">
                     <p>${message.content}</p>
@@ -328,15 +300,17 @@ function showChat(listingIndex) {
     document.getElementById('chatForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const messageContent = document.getElementById('chatMessageContent').value;
-        messages[currentUser.email][listingIndex].push({
+        chat.messages.push({
             sender: currentUser.email,
             content: messageContent,
             timestamp: new Date().toISOString()
         });
-        saveMessages();
-        refreshData();
-        document.getElementById('chatMessageContent').value = '';
-        updateChatMessages();
+        saveToDatabase("messages", messages[index]).then(() => {
+            document.getElementById('chatMessageContent').value = '';
+            updateChatMessages();
+        }).catch(error => {
+            alert('Mesaj gönderilirken bir hata oluştu: ' + error);
+        });
     });
 }
 
@@ -344,13 +318,11 @@ function logout() {
     currentUser = null;
     localStorage.removeItem('currentUser');
     refreshData();
-    showHomePage();
 }
 
 // Sayfa yüklendiğinde veriyi yenile ve ana sayfayı göster
 window.onload = function() {
     refreshData();
-    showHomePage();
     // Kullanıcı girişi yapılmışsa, çıkış butonu ekle
     if (currentUser) {
         const nav = document.querySelector('nav ul');
@@ -364,11 +336,9 @@ window.onload = function() {
     }
 };
 
-// Menü linklerine tıklandığında ilgili sayfaları göster ve veriyi yenile
-document.getElementById('homeLink').addEventListener('click', function() {
-    refreshData();
-    showHomePage();
-});
+// Menü linklerine tıklandığında ilgili sayfaları göster
+document.getElementById('homeLink').addEventListener('click', () => { refreshData(); showHomePage(); });
 document.getElementById('loginLink').addEventListener('click', showLoginForm);
 document.getElementById('registerLink').addEventListener('click', showRegisterForm);
 document.getElementById('newListingLink').addEventListener('click', showNewListingForm);
+document.getElementById('chatsLink').addEventListener('click', showChatsPage);
