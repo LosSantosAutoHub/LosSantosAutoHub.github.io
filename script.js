@@ -3,27 +3,46 @@ const vehicles = {
     "Albany": ["Cavalcade", "Emperor", "Hermes"],
     "Annis": ["Elegy", "RE-7B", "Savestra"],
     "Bravado": ["Banshee", "Buffalo", "Gauntlet"],
-    // Diğer markalar ve modeller eklenebilir
+    // Diğer markalar ve modeller eklenecek
 };
 
-let listings = [];
-let currentUser = null;
-let messages = [];
+// Simüle edilmiş "sunucu" verisi
+let serverData = JSON.parse(localStorage.getItem('serverData')) || { listings: [], users: [], messages: {} };
 
-async function fetchListings() {
-    try {
-        const response = await fetch('listings.json');
-        listings = await response.json();
-        showHomePage();
-    } catch (error) {
-        console.error("İlanlar yüklenirken hata oluştu:", error);
-    }
+// Veriyi "sunucu"ya kaydetme fonksiyonu
+function saveToServer() {
+    localStorage.setItem('serverData', JSON.stringify(serverData));
 }
 
-async function refreshData() {
-    await fetchListings();
+// Veriyi "sunucu"dan alma fonksiyonu
+function getFromServer() {
+    serverData = JSON.parse(localStorage.getItem('serverData')) || { listings: [], users: [], messages: {} };
+    return serverData;
+}
+
+// Her sayfa yüklendiğinde ve önemli işlemlerden sonra veriyi güncelle
+function refreshData() {
+    const data = getFromServer();
+    listings = data.listings;
+    messages = data.messages;
+    // Mevcut kullanıcıyı koru
     currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    showHomePage();
+}
+
+// Değişkenleri başlangıç değerleriyle tanımla
+let listings = [];
+let currentUser = null;
+let messages = {};
+
+
+function saveListings() {
+    serverData.listings = listings;
+    saveToServer();
+}
+
+function saveMessages() {
+    serverData.messages = messages;
+    saveToServer();
 }
 
 function showHomePage() {
