@@ -1,80 +1,29 @@
-// script.js
-
+// Araç markaları ve modelleri
 const vehicles = {
     "Albany": ["Cavalcade", "Emperor", "Hermes"],
     "Annis": ["Elegy", "RE-7B", "Savestra"],
     "Bravado": ["Banshee", "Buffalo", "Gauntlet"],
-    // Diğer markalar ve modeller eklenecek
+    // Diğer markalar ve modeller eklenebilir
 };
-
-// IndexedDB için değişkenler ve fonksiyonlar
-let db;
-const dbName = "GtaMarketDB";
-const dbVersion = 1;
-
-const request = indexedDB.open(dbName, dbVersion);
-
-request.onerror = function(event) {
-    console.error("IndexedDB hatası:", event.target.error);
-};
-
-request.onsuccess = function(event) {
-    db = event.target.result;
-    console.log("IndexedDB başarıyla açıldı");
-    refreshData();
-};
-
-request.onupgradeneeded = function(event) {
-    db = event.target.result;
-    const objectStore = db.createObjectStore("listings", { keyPath: "id", autoIncrement: true });
-    const messagesStore = db.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
-};
-
-function saveToDatabase(storeName, data) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName], "readwrite");
-        const objectStore = transaction.objectStore(storeName);
-        const request = objectStore.add(data);
-        
-        request.onerror = function(event) {
-            reject("Veri eklenirken hata oluştu");
-        };
-        
-        request.onsuccess = function(event) {
-            resolve(event.target.result);
-        };
-    });
-}
-
-function getFromDatabase(storeName) {
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction([storeName]);
-        const objectStore = transaction.objectStore(storeName);
-        const request = objectStore.getAll();
-        
-        request.onerror = function(event) {
-            reject("Veriler alınırken hata oluştu");
-        };
-        
-        request.onsuccess = function(event) {
-            resolve(event.target.result);
-        };
-    });
-}
 
 let listings = [];
 let currentUser = null;
-let messages = {};
+let messages = [];
 
-async function refreshData() {
+async function fetchListings() {
     try {
-        listings = await getFromDatabase("listings");
-        messages = await getFromDatabase("messages");
-        currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        const response = await fetch('listings.json');
+        listings = await response.json();
         showHomePage();
     } catch (error) {
-        console.error("Veri yenileme hatası:", error);
+        console.error("İlanlar yüklenirken hata oluştu:", error);
     }
+}
+
+async function refreshData() {
+    await fetchListings();
+    currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    showHomePage();
 }
 
 function showHomePage() {
@@ -125,17 +74,15 @@ function showLoginForm() {
         const email = document.getElementById('loginEmail').value;
         const password = document.getElementById('loginPassword').value;
 
-        getFromDatabase("users").then(users => {
-            const user = users.find(u => u.email === email && u.password === password);
-            if (user) {
-                currentUser = user;
-                localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                alert('Giriş başarılı!');
-                refreshData();
-            } else {
-                alert('Geçersiz e-posta veya şifre!');
-            }
-        });
+        // Demo amaçlı basit doğrulama
+        if (email === "demo@example.com" && password === "demo123") {
+            currentUser = { email: email, name: "Demo User" };
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            alert('Giriş başarılı!');
+            refreshData();
+        } else {
+            alert('Geçersiz e-posta veya şifre!');
+        }
     });
 }
 
@@ -157,13 +104,9 @@ function showRegisterForm() {
         const email = document.getElementById('registerEmail').value;
         const password = document.getElementById('registerPassword').value;
 
-        const newUser = { name, email, password };
-        saveToDatabase("users", newUser).then(() => {
-            alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
-            showLoginForm();
-        }).catch(error => {
-            alert('Kayıt olurken bir hata oluştu: ' + error);
-        });
+        // Demo amaçlı basit kayıt
+        alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
+        showLoginForm();
     });
 }
 
@@ -227,22 +170,20 @@ function showNewListingForm() {
     document.getElementById('newListingForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const newListing = {
+            id: listings.length + 1,
             vehicleType: document.getElementById('vehicleType').value,
             brand: document.getElementById('brand').value,
             model: document.getElementById('model').value,
-            price: document.getElementById('price').value,
+            price: parseInt(document.getElementById('price').value),
             platform: document.getElementById('platform').value,
             description: document.getElementById('description').value,
             accidentHistory: document.getElementById('accidentHistory').value,
             images: ['placeholder-image.jpg'], // Gerçek dosya yükleme işlemi burada yapılmalı
             userEmail: currentUser.email
         };
-        saveToDatabase("listings", newListing).then(() => {
-            alert('İlan başarıyla eklendi!');
-            refreshData();
-        }).catch(error => {
-            alert('İlan eklenirken bir hata oluştu: ' + error);
-        });
+        listings.push(newListing);
+        alert('İlan başarıyla eklendi! Not: Bu demo versiyonunda, ilan sadece bu oturum için kaydedildi.');
+        showHomePage();
     });
 }
 
@@ -283,7 +224,7 @@ function showChat(index) {
 
     function updateChatMessages() {
         const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = '';
+chatMessages.innerHTML = '';
         for (const message of chat.messages) {
             chatMessages.innerHTML += `
                 <div class="message ${message.sender === currentUser.email ? 'sent' : 'received'}">
@@ -305,19 +246,59 @@ function showChat(index) {
             content: messageContent,
             timestamp: new Date().toISOString()
         });
-        saveToDatabase("messages", messages[index]).then(() => {
-            document.getElementById('chatMessageContent').value = '';
-            updateChatMessages();
-        }).catch(error => {
-            alert('Mesaj gönderilirken bir hata oluştu: ' + error);
-        });
+        document.getElementById('chatMessageContent').value = '';
+        updateChatMessages();
     });
+}
+
+function deleteListing(index) {
+    if (confirm('Bu ilanı silmek istediğinizden emin misiniz?')) {
+        listings.splice(index, 1);
+        showHomePage();
+    }
 }
 
 function logout() {
     currentUser = null;
     localStorage.removeItem('currentUser');
     refreshData();
+}
+
+function showMessageForm(listingIndex) {
+    if (!currentUser) {
+        alert('Mesaj göndermek için giriş yapmalısınız.');
+        return;
+    }
+
+    const listing = listings[listingIndex];
+    const content = `
+        <h2>${listing.brand} ${listing.model} için Mesaj Gönder</h2>
+        <form id="messageForm">
+            <input type="hidden" id="listingIndex" value="${listingIndex}">
+            <textarea id="messageContent" placeholder="Mesajınızı yazın" required></textarea>
+            <button type="submit">Gönder</button>
+        </form>
+    `;
+    document.getElementById('mainContent').innerHTML = content;
+
+    document.getElementById('messageForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const messageContent = document.getElementById('messageContent').value;
+        const newMessage = {
+            id: messages.length + 1,
+            name: listing.userEmail,
+            avatar: '/placeholder-avatar.jpg',
+            lastMessage: messageContent,
+            messages: [{
+                sender: currentUser.email,
+                content: messageContent,
+                timestamp: new Date().toISOString()
+            }]
+        };
+        messages.push(newMessage);
+        alert('Mesajınız gönderildi!');
+        showHomePage();
+    });
 }
 
 // Sayfa yüklendiğinde veriyi yenile ve ana sayfayı göster

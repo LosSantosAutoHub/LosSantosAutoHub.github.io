@@ -1,0 +1,26 @@
+[
+    {
+      "id": 1,
+      "vehicleType": "car",
+      "brand": "Albany",
+      "model": "Cavalcade",
+      "price": 50000,
+      "platform": "fivem",
+      "description": "Temiz kullanılmış Cavalcade",
+      "accidentHistory": "no",
+      "images": ["https://example.com/cavalcade.jpg"],
+      "userEmail": "user@example.com"
+    },
+    {
+      "id": 2,
+      "vehicleType": "motorcycle",
+      "brand": "Annis",
+      "model": "RE-7B",
+      "price": 75000,
+      "platform": "fivem",
+      "description": "Hızlı ve güçlü motosiklet",
+      "accidentHistory": "no",
+      "images": ["https://example.com/re-7b.jpg"],
+      "userEmail": "user2@example.com"
+    }
+  ]
