@@ -3,7 +3,7 @@ const vehicles = {
     "Albany": ["Cavalcade", "Emperor", "Hermes"],
     "Annis": ["Elegy", "RE-7B", "Savestra"],
     "Bravado": ["Banshee", "Buffalo", "Gauntlet"],
-    // Diğer markalar ve modeller eklenecek
+    
 };
 
 // Simüle edilmiş "sunucu" verisi
